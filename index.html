@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>루루 월드 - 디오라마 맵</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --ink: #2f3c44;
+            --paper: rgba(255, 252, 239, 0.88);
+            --line: rgba(111, 101, 82, 0.25);
+            --accent: #36aaa0;
+            --gold: #d89c2b;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #9ed8e8;
+            font-family: "Segoe UI", "Malgun Gothic", Arial, sans-serif;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        #top-bar {
+            padding: 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .hud-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            max-width: min(680px, calc(100vw - 240px));
+        }
+
+        .hud-box {
+            min-height: 34px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: var(--ink);
+            background: var(--paper);
+            border: 1px solid rgba(255, 255, 255, 0.68);
+            box-shadow: 0 8px 18px rgba(68, 94, 101, 0.12);
+            font-weight: 800;
+            line-height: 1.2;
+            backdrop-filter: blur(10px);
+        }
+
+        .hud-box small {
+            display: block;
+            margin-bottom: 2px;
+            color: rgba(47, 60, 68, 0.62);
+            font-size: 11px;
+            font-weight: 900;
+            letter-spacing: 0.08em;
+        }
+
+        #gold-display {
+            color: #946516;
+        }
+
+        #minimap-container {
+            width: 172px;
+            height: 172px;
+            border-radius: 50%;
+            border: 5px solid rgba(255, 255, 255, 0.82);
+            box-shadow: 0 12px 28px rgba(45, 82, 92, 0.18);
+            position: relative;
+            background: rgba(255, 255, 255, 0.16);
+            overflow: hidden;
+            flex: 0 0 auto;
+        }
+
+        #minimap-arrow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 15px solid #f45f5d;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 7px;
+            height: 7px;
+            background: rgba(255, 255, 255, 0.94);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 0 2px rgba(42, 64, 70, 0.14);
+        }
+
+        #interaction-prompt,
+        #toast {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            color: var(--ink);
+            background: rgba(255, 252, 239, 0.92);
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(45, 82, 92, 0.14);
+            backdrop-filter: blur(10px);
+            font-weight: 850;
+            opacity: 0;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            white-space: nowrap;
+        }
+
+        #interaction-prompt {
+            bottom: 156px;
+            padding: 9px 14px;
+        }
+
+        #toast {
+            top: 84px;
+            padding: 10px 16px;
+        }
+
+        #interaction-prompt.visible,
+        #toast.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(-3px);
+        }
+
+        #dialog {
+            position: absolute;
+            left: 50%;
+            bottom: 26px;
+            width: min(620px, calc(100vw - 32px));
+            transform: translateX(-50%) translateY(16px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+        }
+
+        #dialog.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .dialog-panel {
+            padding: 16px 18px;
+            border-radius: 8px;
+            background: rgba(255, 252, 239, 0.94);
+            border: 1px solid rgba(111, 101, 82, 0.22);
+            box-shadow: 0 18px 38px rgba(45, 82, 92, 0.18);
+            color: var(--ink);
+            backdrop-filter: blur(12px);
+        }
+
+        #dialog-title {
+            margin: 0 0 8px;
+            font-size: 22px;
+            letter-spacing: 0;
+        }
+
+        #dialog-body {
+            margin: 0 0 12px;
+            line-height: 1.55;
+            font-weight: 650;
+            color: rgba(47, 60, 68, 0.84);
+        }
+
+        #dialog-menu {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        #dialog-menu li {
+            min-height: 34px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: rgba(74, 167, 151, 0.1);
+            border: 1px solid rgba(74, 167, 151, 0.18);
+            font-size: 13px;
+            font-weight: 850;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #bottom-bar {
+            padding: 24px;
+            display: flex;
+            align-items: flex-end;
+            gap: 16px;
+        }
+
+        .avatar-diamond {
+            width: 54px;
+            height: 54px;
+            background: #f45f5d;
+            border: 4px solid #fff;
+            transform: rotate(45deg);
+            box-shadow: 5px 5px 0 rgba(62, 84, 89, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+        }
+
+        .avatar-diamond span {
+            transform: rotate(-45deg);
+            font-size: 22px;
+            font-weight: 950;
+            color: #fff;
+        }
+
+        .bars {
+            width: 220px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bar-container {
+            height: 14px;
+            background: rgba(255, 255, 255, 0.56);
+            border: 2px solid #fff;
+            box-shadow: 2px 2px 0 rgba(62, 84, 89, 0.12);
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.16s ease;
+        }
+
+        #hp-bar {
+            background: #f45f5d;
+            width: 100%;
+        }
+
+        #stamina-bar {
+            background: #36aaa0;
+            width: 100%;
+        }
+
+        #pause-menu {
+            position: fixed;
+            inset: 0;
+            background: rgba(238, 250, 253, 0.92);
+            backdrop-filter: blur(14px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--ink);
+            z-index: 100;
+            transition: opacity 0.32s ease;
+            pointer-events: auto;
+            text-align: center;
+            padding: 24px;
+        }
+
+        #pause-menu h1 {
+            margin: 0;
+            color: #f45f5d;
+            font-size: clamp(42px, 8vw, 78px);
+            letter-spacing: 0;
+            line-height: 1;
+        }
+
+        #pause-menu p {
+            margin: 12px 0 0;
+            color: #36aaa0;
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        button {
+            margin-top: 28px;
+            padding: 15px 42px;
+            border: 0;
+            border-radius: 8px;
+            background: #36aaa0;
+            color: #fff;
+            cursor: pointer;
+            font-size: 19px;
+            font-weight: 950;
+            box-shadow: 0 10px 24px rgba(54, 170, 160, 0.28);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .key-hint {
+            margin-top: 22px;
+            color: rgba(47, 60, 68, 0.72);
+            font-size: 14px;
+            line-height: 2.1;
+            font-weight: 750;
+        }
+
+        kbd {
+            background: white;
+            color: #40515a;
+            padding: 4px 8px;
+            border-radius: 6px;
+            box-shadow: 0 2px 0 #d8d6ca;
+            font-family: "Segoe UI", Consolas, monospace;
+            font-weight: 900;
+            margin: 0 3px;
+            border: 1px solid #efeadb;
+        }
+
+        #fps-hud {
+            position: fixed;
+            right: 12px;
+            bottom: 12px;
+            padding: 6px 9px;
+            border-radius: 8px;
+            background: rgba(31, 44, 49, 0.36);
+            color: rgba(255, 255, 255, 0.95);
+            font-family: Consolas, "Liberation Mono", monospace;
+            font-size: 12px;
+            z-index: 90;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        @media (max-width: 720px) {
+            #top-bar {
+                padding: 12px;
+            }
+
+            .hud-stack {
+                max-width: calc(100vw - 142px);
+            }
+
+            .hud-box {
+                padding: 7px 9px;
+                font-size: 13px;
+            }
+
+            #minimap-container {
+                width: 116px;
+                height: 116px;
+                border-width: 4px;
+            }
+
+            #dialog-menu {
+                grid-template-columns: 1fr;
+            }
+
+            .bars {
+                width: 166px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-layer">
+        <div id="fps-hud">-- FPS</div>
+        <div id="top-bar">
+            <div class="hud-stack">
+                <div class="hud-box">
+                    <small>LOCATION</small>
+                    <span id="location-display">학교</span>
+                </div>
+                <div class="hud-box">
+                    <small>POS</small>
+                    <span id="pos-display">0, 0</span>
+                </div>
+                <div class="hud-box">
+                    <small>GOLD</small>
+                    <span id="gold-display">999,999,999 G</span>
+                </div>
+                <div class="hud-box">
+                    <small>BOAT</small>
+                    <span id="boat-display">미보유</span>
+                </div>
+            </div>
+            <div id="minimap-container">
+                <div id="minimap-arrow"></div>
+            </div>
+        </div>
+
+        <div id="crosshair"></div>
+        <div id="interaction-prompt"></div>
+        <div id="toast"></div>
+
+        <div id="dialog" aria-live="polite">
+            <div class="dialog-panel">
+                <h2 id="dialog-title">장소</h2>
+                <p id="dialog-body"></p>
+                <ul id="dialog-menu"></ul>
+            </div>
+        </div>
+
+        <div id="bottom-bar">
+            <div class="avatar-diamond">
+                <span>M</span>
+            </div>
+            <div class="bars">
+                <div class="bar-container"><div id="hp-bar" class="bar-fill"></div></div>
+                <div class="bar-container"><div id="stamina-bar" class="bar-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pause-menu">
+        <h1>루루 월드</h1>
+        <p>판타지 디오라마 테스트 맵</p>
+        <button id="start-btn">탐험 시작</button>
+        <div class="key-hint">
+            <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동
+            <kbd>DRAG</kbd> 시점
+            <kbd>SHIFT</kbd> 달리기
+            <kbd>SPACE</kbd> 점프
+            <kbd>E</kbd> 대화 / 메뉴
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <script src="js/config.js?v=20260529g"></script>
+    <script src="js/collision-engine.js?v=20260529g"></script>
+    <script src="js/ui-engine.js?v=20260529g"></script>
+    <script src="js/map-engine.js?v=20260529g"></script>
+    <script src="js/player-engine.js?v=20260529g"></script>
+    <script src="js/game-engine.js?v=20260529g"></script>
+</body>
+</html>
