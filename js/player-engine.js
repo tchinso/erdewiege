@@ -23,7 +23,8 @@
             this.state = {
                 gold: C.devGold,
                 hasBoat: false,
-                onBoat: false
+                onBoat: false,
+                boatDock: null
             };
 
             this.setupInput();
@@ -52,13 +53,21 @@
                         this.isRunning = true;
                         break;
                     case "Space":
+                        event.preventDefault();
                         this.jump();
                         break;
                     case "KeyE":
+                        event.preventDefault();
                         this.interact();
                         break;
                     case "Escape":
                         this.ui.hideDialog();
+                        break;
+                    default:
+                        if ((event.key || "").toLowerCase() === "e" || event.key === "ㄷ") {
+                            event.preventDefault();
+                            this.interact();
+                        }
                         break;
                 }
             });
@@ -82,6 +91,12 @@
                         this.isRunning = false;
                         break;
                 }
+            });
+
+            this.ui.dom.prompt.addEventListener("pointerdown", (event) => {
+                if (!this.ui.dom.prompt.classList.contains("visible")) return;
+                event.preventDefault();
+                this.interact();
             });
         }
 
@@ -114,7 +129,18 @@
             }
 
             const pos = this.camera.position;
-            const target = this.collision.nearestInteraction(pos, () => !this.state.onBoat || true);
+            const target = this.findStaticInteraction(pos);
+            if (target && target.id === "port" && (this.state.onBoat || this.world.isBoatDockedAtPort(this.state))) {
+                const result = this.world.handleInteraction(target, this.state, this.ui);
+                this.applyInteractionResult(result);
+                return;
+            }
+
+            if (this.canBoardDockedBoat(pos)) {
+                this.boardDockedBoat();
+                return;
+            }
+
             if (target) {
                 const result = this.world.handleInteraction(target, this.state, this.ui);
                 this.applyInteractionResult(result);
@@ -124,6 +150,33 @@
             if (this.state.onBoat && this.world.isSea(pos.x, pos.z)) {
                 this.world.showSeaDialog(this.ui);
             }
+        }
+
+        findStaticInteraction(pos) {
+            return this.collision.nearestInteraction(pos, (item) => !this.state.onBoat || item.id === "port");
+        }
+
+        canBoardDockedBoat(pos) {
+            const dock = this.state.boatDock;
+            if (!this.state.hasBoat || this.state.onBoat || !dock) return false;
+
+            const dx = pos.x - dock.x;
+            const dz = pos.z - dock.z;
+            const radius = C.boatBoardRadius || 20;
+            return dx * dx + dz * dz <= radius * radius;
+        }
+
+        boardDockedBoat() {
+            const dock = this.state.boatDock;
+            if (!dock) return;
+
+            this.state.onBoat = true;
+            this.state.boatDock = null;
+            this.camera.position.set(dock.x, C.waterLevel + C.boatEyeHeight, dock.z);
+            this.velocity.set(0, 0, 0);
+            this.isGrounded = true;
+            this.ui.setBoatStatus("승선 중");
+            this.ui.showToast("정박한 돛단배에 탔습니다.", 1.4);
         }
 
         applyInteractionResult(result) {
@@ -228,6 +281,8 @@
 
         resolveBoatMovement(pos) {
             if (!this.world.isBoatAllowed(pos.x, pos.z)) {
+                if (this.dockBoatAtShore(pos)) return;
+
                 pos.x = this.previous.x;
                 pos.z = this.previous.z;
                 this.velocity.x = 0;
@@ -245,18 +300,56 @@
             this.isGrounded = true;
         }
 
+        dockBoatAtShore(pos) {
+            const spot = this.world.getBoatDockingSpot(pos, this.previous);
+            if (!spot) return false;
+
+            this.camera.getWorldDirection(this.tmpDir);
+            this.state.onBoat = false;
+            this.state.boatDock = {
+                x: spot.boat.x,
+                z: spot.boat.z,
+                heading: Math.atan2(this.tmpDir.x, this.tmpDir.z)
+            };
+
+            pos.x = spot.land.x;
+            pos.z = spot.land.z;
+            this.collision.resolveObstacles(pos, C.playerRadius);
+            this.collision.clampToBounds(pos);
+            if (this.world.isSea(pos.x, pos.z)) {
+                pos.x = spot.land.x;
+                pos.z = spot.land.z;
+            }
+            pos.y = this.world.heightAt(pos.x, pos.z) + C.eyeHeight;
+
+            this.velocity.set(0, 0, 0);
+            this.isGrounded = true;
+            this.ui.setBoatStatus("정박 중");
+            this.ui.showToast("돛단배를 해안에 정박했습니다. 다시 타려면 정박한 곳으로 돌아가세요.", 2.4);
+            return true;
+        }
+
         updateHud() {
             const pos = this.camera.position;
             this.ui.setPosition(pos.x, pos.z);
             this.ui.setStamina(this.stamina);
-            this.ui.setBoatStatus(this.state.onBoat ? "승선 중" : (this.state.hasBoat ? "보유" : "미보유"));
+            this.ui.setBoatStatus(this.getBoatStatusText());
             this.ui.setLocation(this.world.getLocation(pos.x, pos.z, this.state));
 
             this.camera.getWorldDirection(this.tmpDir);
             this.ui.setDirection(Math.atan2(this.tmpDir.x, this.tmpDir.z));
 
-            const target = this.collision.nearestInteraction(pos);
-            if (target && !this.ui.dialogVisible) {
+            const target = this.findStaticInteraction(pos);
+            if (target && target.id === "port" && this.state.onBoat && !this.ui.dialogVisible) {
+                this.promptTarget = target;
+                this.ui.showInteraction("항구 반납");
+            } else if (target && target.id === "port" && this.world.isBoatDockedAtPort(this.state) && !this.ui.dialogVisible) {
+                this.promptTarget = target;
+                this.ui.showInteraction("돛단배 반납");
+            } else if (this.canBoardDockedBoat(pos) && !this.ui.dialogVisible) {
+                this.promptTarget = null;
+                this.ui.showInteraction("돛단배 타기");
+            } else if (target && !this.ui.dialogVisible) {
                 this.promptTarget = target;
                 this.ui.showInteraction(target.label);
             } else if (this.state.onBoat && this.world.isSea(pos.x, pos.z) && !this.ui.dialogVisible) {
@@ -266,6 +359,13 @@
                 this.promptTarget = null;
                 this.ui.hideInteraction();
             }
+        }
+
+        getBoatStatusText() {
+            if (this.state.onBoat) return "승선 중";
+            if (this.state.hasBoat && this.state.boatDock) return "정박 중";
+            if (this.state.hasBoat) return "대여 중";
+            return "미보유";
         }
     }
 

@@ -34,6 +34,7 @@
             this.tmpVec = new THREE.Vector3();
             this.rng = ns.mulberry32(240529);
             this.boatSpawn = { x: 144, z: 232 };
+            this.portBoatDock = { x: 140, z: 209, heading: -Math.PI / 2 };
             this.portLanding = { x: 178, z: 174 };
         }
 
@@ -246,6 +247,35 @@
 
         isBoatAllowed(x, z) {
             return this.isSea(x, z);
+        }
+
+        getBoatDockingSpot(landPos, waterPos) {
+            if (!this.isBoatAllowed(waterPos.x, waterPos.z)) return null;
+            if (this.isSea(landPos.x, landPos.z)) return null;
+            return {
+                boat: { x: waterPos.x, z: waterPos.z },
+                land: { x: landPos.x, z: landPos.z }
+            };
+        }
+
+        isPortDockingArea(x, z) {
+            const dx = x - this.boatSpawn.x;
+            const dz = z - this.boatSpawn.z;
+            return dx * dx + dz * dz <= 42 * 42 || this.isDock(x, z) || this.isNearDock(x, z, 24);
+        }
+
+        isNearDock(x, z, margin) {
+            const pad = margin || 0;
+            return this.dockZones.some((zone) => (
+                x >= zone.x - zone.w / 2 - pad &&
+                x <= zone.x + zone.w / 2 + pad &&
+                z >= zone.z - zone.d / 2 - pad &&
+                z <= zone.z + zone.d / 2 + pad
+            ));
+        }
+
+        isBoatDockedAtPort(state) {
+            return !!(state && state.boatDock && this.isPortDockingArea(state.boatDock.x, state.boatDock.z));
         }
 
         addSea() {
@@ -495,7 +525,7 @@
             this.addQuayDetails();
             this.addDocks();
             this.addMerchantShip(184, 260);
-            this.dockBoat = this.addSmallBoat(140, 209, 0.68, -Math.PI / 2, false);
+            this.dockBoat = this.addSmallBoat(this.portBoatDock.x, this.portBoatDock.z, 0.68, this.portBoatDock.heading, true);
             this.playerBoat = this.addSmallBoat(0, 0, 0.72, 0, true);
             this.playerBoat.visible = false;
 
@@ -609,9 +639,23 @@
             if (!item) return null;
 
             if (item.id === "port") {
-                if (!state.hasBoat || !state.onBoat) {
+                if (state.onBoat) {
+                    state.hasBoat = false;
+                    state.onBoat = false;
+                    state.boatDock = null;
+                    ui.setBoatStatus("미보유");
+                    ui.showDialog({
+                        title: "항구",
+                        body: "돛단배를 항구에 반납하고 부두로 내렸습니다. 필요하면 다시 항구에서 빌릴 수 있습니다.",
+                        items: ["돛단배 반납", "정박 완료", "항구 거리"]
+                    });
+                    return { moveTo: this.portLanding, mode: "land" };
+                }
+
+                if (!state.hasBoat) {
                     state.hasBoat = true;
                     state.onBoat = true;
+                    state.boatDock = null;
                     ui.setBoatStatus("승선 중");
                     ui.showDialog({
                         title: "항구",
@@ -621,14 +665,24 @@
                     return { moveTo: this.boatSpawn, mode: "boat" };
                 }
 
-                state.onBoat = false;
-                ui.setBoatStatus("보유");
+                if (this.isBoatDockedAtPort(state)) {
+                    state.hasBoat = false;
+                    state.boatDock = null;
+                    ui.setBoatStatus("미보유");
+                    ui.showDialog({
+                        title: "항구",
+                        body: "정박해 둔 돛단배를 항구에 반납했습니다. 이제 항구에서 다시 대여할 수 있습니다.",
+                        items: ["돛단배 반납", "대여 가능", "항구 거리"]
+                    });
+                    return null;
+                }
+
                 ui.showDialog({
                     title: "항구",
-                    body: "돛단배를 부두에 묶고 항구로 내렸습니다.",
-                    items: ["정박", "무역소", "항구 거리"]
+                    body: "빌린 돛단배가 아직 다른 해안에 정박해 있습니다. 정박한 곳으로 돌아가 배를 타고 항구까지 가져와야 반납할 수 있습니다.",
+                    items: ["추가 대여 불가", "정박 위치 복귀", "항구 반납 필요"]
                 });
-                return { moveTo: this.portLanding, mode: "land" };
+                return null;
             }
 
             ui.showDialog({
@@ -670,7 +724,12 @@
                     if (this.dockBoat) this.dockBoat.visible = false;
                 } else {
                     this.playerBoat.visible = false;
-                    if (this.dockBoat) this.dockBoat.visible = true;
+                    if (this.dockBoat) {
+                        const dock = state.hasBoat && state.boatDock ? state.boatDock : this.portBoatDock;
+                        this.dockBoat.visible = true;
+                        this.dockBoat.position.set(dock.x, C.waterLevel + 0.25, dock.z);
+                        this.dockBoat.rotation.y = typeof dock.heading === "number" ? dock.heading : this.portBoatDock.heading;
+                    }
                 }
             }
         }

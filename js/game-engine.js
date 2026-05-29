@@ -130,15 +130,16 @@
             if (spawn === "sea") {
                 this.player.state.hasBoat = true;
                 this.player.state.onBoat = true;
+                this.player.state.boatDock = null;
                 this.ui.setBoatStatus("승선 중");
                 this.camera.position.set(266, C.waterLevel + C.boatEyeHeight, 286);
-                this.camera.lookAt(204, C.waterLevel + 4, 226);
+                this.camera.lookAt(204, C.waterLevel + C.boatEyeHeight - 1.2, 226);
                 return;
             }
 
             const point = points[spawn] || points.school;
             this.player.placeAt(point.x, point.z);
-            this.camera.lookAt(point.lookX, this.world.heightAt(point.lookX, point.lookZ) + 8, point.lookZ);
+            this.camera.lookAt(point.lookX, this.camera.position.y - 1.2, point.lookZ);
         }
 
         syncLookFromCamera() {
@@ -163,7 +164,7 @@
                 if (!this.dragLook || this.controls.isLocked) return;
                 this.lookYaw -= event.movementX * 0.003;
                 this.lookPitch -= event.movementY * 0.003;
-                this.lookPitch = ns.clamp(this.lookPitch, -1.05, -0.08);
+                this.lookPitch = ns.clamp(this.lookPitch, -1.05, 0.72);
                 this.camera.rotation.set(this.lookPitch, this.lookYaw, 0, "YXZ");
             });
 
@@ -172,8 +173,8 @@
                 const turn = 0.08;
                 if (event.code === "ArrowLeft") this.lookYaw += turn;
                 if (event.code === "ArrowRight") this.lookYaw -= turn;
-                if (event.code === "ArrowUp") this.lookPitch = ns.clamp(this.lookPitch - turn, -1.05, -0.08);
-                if (event.code === "ArrowDown") this.lookPitch = ns.clamp(this.lookPitch + turn, -1.05, -0.08);
+                if (event.code === "ArrowUp") this.lookPitch = ns.clamp(this.lookPitch - turn, -1.05, 0.72);
+                if (event.code === "ArrowDown") this.lookPitch = ns.clamp(this.lookPitch + turn, -1.05, 0.72);
                 this.camera.rotation.set(this.lookPitch, this.lookYaw, 0, "YXZ");
             });
         }

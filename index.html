@@ -140,6 +140,7 @@
         #interaction-prompt {
             bottom: 156px;
             padding: 9px 14px;
+            pointer-events: none;
         }
 
         #toast {
@@ -151,6 +152,11 @@
         #toast.visible {
             opacity: 1;
             transform: translateX(-50%) translateY(-3px);
+        }
+
+        #interaction-prompt.visible {
+            cursor: pointer;
+            pointer-events: auto;
         }
 
         #dialog {
@@ -451,11 +457,11 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-    <script src="js/config.js?v=20260529g"></script>
-    <script src="js/collision-engine.js?v=20260529g"></script>
-    <script src="js/ui-engine.js?v=20260529g"></script>
-    <script src="js/map-engine.js?v=20260529g"></script>
-    <script src="js/player-engine.js?v=20260529g"></script>
-    <script src="js/game-engine.js?v=20260529g"></script>
+    <script src="js/config.js?v=20260529h"></script>
+    <script src="js/collision-engine.js?v=20260529h"></script>
+    <script src="js/ui-engine.js?v=20260529h"></script>
+    <script src="js/map-engine.js?v=20260529h"></script>
+    <script src="js/player-engine.js?v=20260529h"></script>
+    <script src="js/game-engine.js?v=20260529h"></script>
 </body>
 </html>
